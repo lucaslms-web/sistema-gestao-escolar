@@ -1,10 +1,17 @@
 package org.example;
 
-//TIP To <b>Run</b> code, press <shortcut actionId="Run"/> or
-// click the <icon src="AllIcons.Actions.Execute"/> icon in the gutter.
 public class Main {
     public static void main(String[] args) {
-        GeradorSequencial gerador = new GeradorSequencial();
-        gerador.gerarTodosOsArquivos();
+        System.out.println("=== BATETIA DE TESTES DE GERAÇÃO (ETAPA 1) ===\n");
+
+        // 1. Teste Sequencial
+        GeradorSequencial geradorSeq = new GeradorSequencial();
+        geradorSeq.gerarTodosOsArquivos();
+
+        System.out.println("\n------------------------------------------------\n");
+
+        // 2. Teste Concorrente
+        GeradorConcorrente geradorConc = new GeradorConcorrente();
+        geradorConc.gerarTodosOsArquivosConcorrentes();
     }
 }
