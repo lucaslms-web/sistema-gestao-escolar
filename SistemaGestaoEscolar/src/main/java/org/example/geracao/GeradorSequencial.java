@@ -1,4 +1,4 @@
-package org.example;
+package org.example.geracao;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -28,7 +28,7 @@ public class GeradorSequencial {
         System.out.println("\nGeração concluída!");
     }
 
-    private void gerarArquivo(String nomeFicheiro, int qtdLinhas, long seed) {
+    public void gerarArquivo(String nomeFicheiro, int qtdLinhas, long seed) {
         Random random = new Random(seed);
         long inicioTempo = System.nanoTime();
 

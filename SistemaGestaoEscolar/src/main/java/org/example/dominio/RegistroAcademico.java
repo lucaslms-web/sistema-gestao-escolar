@@ -1,4 +1,4 @@
-package org.example;
+package org.example.dominio;
 
 import java.time.LocalDate;
 
