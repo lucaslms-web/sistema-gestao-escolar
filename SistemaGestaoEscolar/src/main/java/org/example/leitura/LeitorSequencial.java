@@ -6,26 +6,36 @@ import org.example.dominio.Professor;
 import org.example.dominio.TipoRegistro;
 
 import java.io.BufferedReader;
-import java.io.FileReader;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class LeitorSequencial {
 
     private static final int TOTAL_COLUNAS_ESPERADO = 6;
+    static final int BUFFER_SIZE = 64 * 1024;
 
     public ResultadoLeitura lerArquivo(String caminhoArquivo) {
-        List<Pessoa> registrosValidos = new ArrayList<>();
+        return lerArquivo(caminhoArquivo, true);
+    }
+
+    public ResultadoLeitura lerArquivo(String caminhoArquivo, boolean logConsole) {
+        Path path = Path.of(caminhoArquivo);
+        int capacidadeInicial = estimarCapacidade(path);
+        List<Pessoa> registrosValidos = new ArrayList<>(capacidadeInicial);
         int linhasValidas = 0;
         int linhasInvalidas = 0;
 
         long inicioTempo = System.nanoTime();
 
-        try (BufferedReader br = new BufferedReader(new FileReader(caminhoArquivo))) {
+        try (BufferedReader br = new BufferedReader(
+                Files.newBufferedReader(path, StandardCharsets.UTF_8), BUFFER_SIZE)) {
             String linha;
             while ((linha = br.readLine()) != null) {
                 if (linha.isBlank()) {
@@ -34,24 +44,32 @@ public class LeitorSequencial {
                 }
 
                 try {
-                    Pessoa pessoa = parsearLinha(linha);
-                    registrosValidos.add(pessoa);
+                    registrosValidos.add(parsearLinha(linha));
                     linhasValidas++;
                 } catch (IllegalArgumentException | DateTimeParseException e) {
                     linhasInvalidas++;
                 }
             }
         } catch (IOException e) {
-            System.err.println("Erro ao abrir ou ler o arquivo " + caminhoArquivo + ": " + e.getMessage());
+            throw new UncheckedIOException("Erro ao abrir ou ler o arquivo: " + caminhoArquivo, e);
         }
 
-        long fimTempo = System.nanoTime();
-        double tempoMs = (fimTempo - inicioTempo) / 1_000_000.0;
+        double tempoMs = (System.nanoTime() - inicioTempo) / 1_000_000.0;
 
-        System.out.printf("Leitura: %-22s | Válidas: %-8d | Inválidas: %-6d | Tempo: %8.2f ms%n",
-                caminhoArquivo, linhasValidas, linhasInvalidas, tempoMs);
-
+        if (logConsole) {
+            System.out.printf("Leitura: %-22s | Válidas: %-8d | Inválidas: %-6d | Tempo: %8.2f ms%n",
+                    caminhoArquivo, linhasValidas, linhasInvalidas, tempoMs);
+        }
         return new ResultadoLeitura(registrosValidos, linhasValidas, linhasInvalidas, tempoMs);
+    }
+
+    static int estimarCapacidade(Path path) {
+        try {
+            long bytes = Files.size(path);
+            return (int) Math.max(16, Math.min(Integer.MAX_VALUE, bytes / 42L));
+        } catch (IOException e) {
+            return 16;
+        }
     }
 
     public Pessoa parsearLinha(String linha) {
@@ -67,7 +85,15 @@ public class LeitorSequencial {
             throw new IllegalArgumentException("ID deve ser maior que zero.");
         }
 
-        TipoRegistro tipo = TipoRegistro.valueOf(colunas[1].trim().toUpperCase());
+        String tipoStr = colunas[1].trim();
+        TipoRegistro tipo;
+        if ("ALUNO".equals(tipoStr)) {
+            tipo = TipoRegistro.ALUNO;
+        } else if ("PROFESSOR".equals(tipoStr)) {
+            tipo = TipoRegistro.PROFESSOR;
+        } else {
+            tipo = TipoRegistro.valueOf(tipoStr.toUpperCase());
+        }
 
         String nome = colunas[2].trim();
         if (nome.isEmpty()) {
@@ -84,28 +110,39 @@ public class LeitorSequencial {
         LocalDate data = LocalDate.parse(colunas[5].trim());
 
         return switch (tipo) {
-            case ALUNO -> {
-                List<Double> valoresExtras = parsearListaDoubles(listaBruta);
-                int frequencia = (int) Math.round(valoresExtras.get(0));
-                String turma = (valoresExtras.size() > 1)
-                        ? "Turma-" + valoresExtras.get(1).intValue()
-                        : "Turma-A";
-                yield new Aluno(id, nome, data, valor, frequencia, turma);
-            }
+            case ALUNO -> parsearAluno(id, nome, data, valor, listaBruta);
             case PROFESSOR -> {
-                List<String> materias = Arrays.asList(listaBruta.split(","));
+                String[] partes = listaBruta.split(",");
+                List<String> materias = new ArrayList<>(partes.length);
+                for (String m : partes) {
+                    String limpa = m.trim();
+                    if (!limpa.isEmpty()) {
+                        materias.add(limpa);
+                    }
+                }
                 yield new Professor(id, nome, data, valor, materias);
             }
             default -> throw new IllegalArgumentException("Tipo de registro não suportado neste arquivo: " + tipo);
         };
     }
 
-    private List<Double> parsearListaDoubles(String texto) {
-        String[] itens = texto.split(",");
-        List<Double> valores = new ArrayList<>(itens.length);
-        for (String item : itens) {
-            valores.add(Double.parseDouble(item.trim()));
+    private Aluno parsearAluno(int id, String nome, LocalDate data, double nota, String listaBruta) {
+        int idxVirgula = listaBruta.indexOf(',');
+        if (idxVirgula < 0) {
+            int frequencia = Integer.parseInt(listaBruta.trim());
+            return new Aluno(id, nome, data, nota, frequencia, "Turma-A");
         }
-        return valores;
+
+        int frequencia = Integer.parseInt(listaBruta.substring(0, idxVirgula).trim());
+        String sufixoTurma = listaBruta.substring(idxVirgula + 1).trim();
+        String turma;
+        if (sufixoTurma.isEmpty()) {
+            turma = "Turma-A";
+        } else if (sufixoTurma.startsWith("Turma-")) {
+            turma = sufixoTurma;
+        } else {
+            turma = "Turma-" + sufixoTurma;
+        }
+        return new Aluno(id, nome, data, nota, frequencia, turma);
     }
 }

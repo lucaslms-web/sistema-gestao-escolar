@@ -30,11 +30,8 @@ public class SimuladorClientesConcorrentes {
         }
     }
 
-    /**
-     * Simulação concorrente usando RepositorioComLocks (ReentrantReadWriteLock).
-     */
     public ResultadoSimulacao executarCargaConcorrente(
-            RepositorioComLocks repositorio,
+            RepositorioEscolar repositorio,
             int numThreads,
             int totalOperacoes,
             int faixaIdsExistentes,
@@ -60,32 +57,7 @@ public class SimuladorClientesConcorrentes {
             clientes.add(() -> {
                 int operacoesConcluidas = 0;
                 for (int i = 0; i < qtdOps; i++) {
-                    int sorteio = rnd.nextInt(100);
-                    int idAlvo = 1 + rnd.nextInt(Math.max(1, faixaIdsExistentes));
-
-                    if (sorteio < 40) {
-                        repositorio.buscarPorId(idAlvo);
-                    } else if (sorteio < 70) {
-                        repositorio.consultarSituacaoAlunoAtomico(idAlvo);
-                    } else if (sorteio < 85) {
-                        double novaNota = rnd.nextDouble() * 10.0;
-                        int novaFreq = 60 + rnd.nextInt(41);
-                        repositorio.atualizarNotaEFrequenciaAtomico(idAlvo, novaNota, novaFreq);
-                    } else if (sorteio < 95) {
-                        int novoId = idBaseThread + (i % 5_000);
-                        Aluno novoAluno = new Aluno(
-                                novoId,
-                                "Cliente-" + novoId,
-                                LocalDate.of(2004, 4, 15),
-                                7.5,
-                                85,
-                                "Turma-99"
-                        );
-                        repositorio.upsertAtomico(novoAluno);
-                    } else {
-                        int idRemover = idBaseThread + (i % 5_000);
-                        repositorio.remover(idRemover);
-                    }
+                    executarOperacaoMista(repositorio, rnd, faixaIdsExistentes, idBaseThread + (i % 5_000));
                     operacoesConcluidas++;
                 }
                 return operacoesConcluidas;
@@ -109,144 +81,65 @@ public class SimuladorClientesConcorrentes {
             executor.shutdownNow();
         }
 
-        long fim = System.nanoTime();
-        double tempoMs = (fim - inicio) / 1_000_000.0;
-
+        double tempoMs = (System.nanoTime() - inicio) / 1_000_000.0;
         return new ResultadoSimulacao(numThreads, totalExecutado, tempoMs, repositorio.tamanho());
     }
 
-    /**
-     * Simulação concorrente usando RepositorioComAtores (Apache Pekko Typed - Bônus).
-     */
     public ResultadoSimulacao executarCargaConcorrenteAtores(
             RepositorioComAtores repositorio,
             int numThreads,
             int totalOperacoes,
             int faixaIdsExistentes,
             long seed) {
-
-        if (numThreads < 1 || totalOperacoes < 1) {
-            throw new IllegalArgumentException("Threads e total de operações devem ser >= 1.");
-        }
-
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
-        SplittableRandom baseRandom = new SplittableRandom(seed);
-
-        int opsPorThread = totalOperacoes / numThreads;
-        int opsRestantes = totalOperacoes % numThreads;
-
-        List<Callable<Integer>> clientes = new ArrayList<>(numThreads);
-
-        for (int t = 0; t < numThreads; t++) {
-            final int qtdOps = (t == numThreads - 1) ? (opsPorThread + opsRestantes) : opsPorThread;
-            final SplittableRandom rnd = baseRandom.split();
-            final int idBaseThread = faixaIdsExistentes + (t * 100_000) + 1;
-
-            clientes.add(() -> {
-                int operacoesConcluidas = 0;
-                for (int i = 0; i < qtdOps; i++) {
-                    int sorteio = rnd.nextInt(100);
-                    int idAlvo = 1 + rnd.nextInt(Math.max(1, faixaIdsExistentes));
-
-                    if (sorteio < 40) {
-                        repositorio.buscarPorId(idAlvo);
-                    } else if (sorteio < 70) {
-                        repositorio.consultarSituacaoAlunoAtomico(idAlvo);
-                    } else if (sorteio < 85) {
-                        double novaNota = rnd.nextDouble() * 10.0;
-                        int novaFreq = 60 + rnd.nextInt(41);
-                        repositorio.atualizarNotaEFrequenciaAtomico(idAlvo, novaNota, novaFreq);
-                    } else if (sorteio < 95) {
-                        int novoId = idBaseThread + (i % 5_000);
-                        Aluno novoAluno = new Aluno(
-                                novoId,
-                                "Cliente-" + novoId,
-                                LocalDate.of(2004, 4, 15),
-                                7.5,
-                                85,
-                                "Turma-99"
-                        );
-                        repositorio.upsertAtomico(novoAluno);
-                    } else {
-                        int idRemover = idBaseThread + (i % 5_000);
-                        repositorio.remover(idRemover);
-                    }
-                    operacoesConcluidas++;
-                }
-                return operacoesConcluidas;
-            });
-        }
-
-        long inicio = System.nanoTime();
-        int totalExecutado = 0;
-
-        try {
-            List<Future<Integer>> resultados = executor.invokeAll(clientes);
-            for (Future<Integer> f : resultados) {
-                totalExecutado += f.get();
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException("Simulação com atores interrompida.", e);
-        } catch (ExecutionException e) {
-            throw new RuntimeException("Erro durante simulação de clientes com atores.", e.getCause());
-        } finally {
-            executor.shutdownNow();
-        }
-
-        long fim = System.nanoTime();
-        double tempoMs = (fim - inicio) / 1_000_000.0;
-
-        return new ResultadoSimulacao(numThreads, totalExecutado, tempoMs, repositorio.tamanho());
+        return executarCargaConcorrente(repositorio, numThreads, totalOperacoes, faixaIdsExistentes, seed);
     }
 
-    /**
-     * Baseline sequencial equivalente para cálculo de speedup da Etapa 3.
-     */
     public ResultadoSimulacao executarCargaSequencial(
-            RepositorioSequencial repositorio,
+            RepositorioEscolar repositorio,
             int totalOperacoes,
             int faixaIdsExistentes,
             long seed) {
 
         SplittableRandom rnd = new SplittableRandom(seed);
-        BoletimService boletim = new BoletimService();
         long inicio = System.nanoTime();
 
         for (int i = 0; i < totalOperacoes; i++) {
-            int sorteio = rnd.nextInt(100);
-            int idAlvo = 1 + rnd.nextInt(Math.max(1, faixaIdsExistentes));
-
-            if (sorteio < 40) {
-                repositorio.buscarPorId(idAlvo);
-            } else if (sorteio < 70) {
-                var p = repositorio.buscarPorId(idAlvo);
-                if (p instanceof Aluno a) {
-                    boletim.verificarSituacao(a);
-                }
-            } else if (sorteio < 85) {
-                var p = repositorio.buscarPorId(idAlvo);
-                if (p instanceof Aluno a) {
-                    repositorio.remover(idAlvo);
-                    repositorio.adicionar(new Aluno(
-                            a.getId(), a.getNome(), a.getDataNascimento(),
-                            rnd.nextDouble() * 10.0, 60 + rnd.nextInt(41), a.getTurma()
-                    ));
-                }
-            } else if (sorteio < 95) {
-                int novoId = faixaIdsExistentes + (i % 5_000) + 1;
-                repositorio.remover(novoId);
-                repositorio.adicionar(new Aluno(
-                        novoId, "Cliente-" + novoId, LocalDate.of(2004, 4, 15), 7.5, 85, "Turma-99"
-                ));
-            } else {
-                int idRemover = faixaIdsExistentes + (i % 5_000) + 1;
-                repositorio.remover(idRemover);
-            }
+            executarOperacaoMista(repositorio, rnd, faixaIdsExistentes, faixaIdsExistentes + (i % 5_000) + 1);
         }
 
-        long fim = System.nanoTime();
-        double tempoMs = (fim - inicio) / 1_000_000.0;
+        double tempoMs = (System.nanoTime() - inicio) / 1_000_000.0;
         return new ResultadoSimulacao(1, totalOperacoes, tempoMs, repositorio.tamanho());
+    }
+
+    private static void executarOperacaoMista(
+            RepositorioEscolar repositorio,
+            SplittableRandom rnd,
+            int faixaIdsExistentes,
+            int idDinamico) {
+
+        int sorteio = rnd.nextInt(100);
+        int idAlvo = 1 + rnd.nextInt(Math.max(1, faixaIdsExistentes));
+
+        if (sorteio < 40) {
+            repositorio.buscarPorId(idAlvo);
+        } else if (sorteio < 70) {
+            repositorio.consultarSituacaoAlunoAtomico(idAlvo);
+        } else if (sorteio < 85) {
+            double novaNota = rnd.nextDouble() * 10.0;
+            int novaFreq = 60 + rnd.nextInt(41);
+            repositorio.atualizarNotaEFrequenciaAtomico(idAlvo, novaNota, novaFreq);
+        } else if (sorteio < 95) {
+            Aluno novoAluno = new Aluno(
+                    idDinamico,
+                    "Cliente-" + idDinamico,
+                    LocalDate.of(2004, 4, 15),
+                    7.5,
+                    85,
+                    "Turma-99"
+            );
+            repositorio.upsertAtomico(novoAluno);
+        } else {
+            repositorio.remover(idDinamico);
+        }
     }
 }

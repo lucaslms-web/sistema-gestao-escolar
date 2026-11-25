@@ -23,7 +23,7 @@ public class Aluno extends Pessoa {
 
         this.nota = nota;
         this.frequencia = frequencia;
-        this.turma = turma;
+        this.turma = turma.trim();
     }
 
     public double getNota() {
@@ -56,7 +56,7 @@ public class Aluno extends Pessoa {
         if (turma == null || turma.isBlank()) {
             throw new IllegalArgumentException("A turma não pode ser vazia.");
         }
-        this.turma = turma;
+        this.turma = turma.trim();
     }
 
     @Override
@@ -67,12 +67,10 @@ public class Aluno extends Pessoa {
 
     @Override
     public String toCsvLinha() {
-        String turmaNumerica = turma.replaceAll("\\D+", "");
-        if (turmaNumerica.isEmpty()) {
-            turmaNumerica = "1";
-        }
-        String listaExtra = frequencia + "," + turmaNumerica;
-        return String.format(Locale.US, "%d;ALUNO;%s;%.2f;%s;%s",
-                getId(), getNome(), nota, listaExtra, getDataNascimento());
+        String codigoTurma = turma.startsWith("Turma-") && turma.length() > 6
+                ? turma.substring(6)
+                : turma;
+        return String.format(Locale.US, "%d;ALUNO;%s;%.2f;%d,%s;%s",
+                getId(), getNome(), nota, frequencia, codigoTurma, getDataNascimento());
     }
 }

@@ -2,12 +2,13 @@ package org.example.dominio;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class Frequencia extends RegistroAcademico {
-    private double percentual;
-    private String observacao;
-    private List<String> datasPresencas;
+    private final double percentual;
+    private final String observacao;
+    private final List<String> datasPresencas;
 
     public Frequencia(int id, LocalDate dataRegistro, double percentual, String observacao, List<String> datasPresencas) {
         super(id, dataRegistro, TipoRegistro.FREQUENCIA);
@@ -17,8 +18,10 @@ public class Frequencia extends RegistroAcademico {
         }
 
         this.percentual = percentual;
-        this.observacao = (observacao != null) ? observacao : "";
-        this.datasPresencas = (datasPresencas != null) ? new ArrayList<>(datasPresencas) : new ArrayList<>();
+        this.observacao = (observacao != null) ? observacao.trim() : "";
+        this.datasPresencas = (datasPresencas != null)
+                ? new ArrayList<>(datasPresencas)
+                : new ArrayList<>();
     }
 
     public double getPercentual() {
@@ -30,7 +33,7 @@ public class Frequencia extends RegistroAcademico {
     }
 
     public List<String> getDatasPresencas() {
-        return datasPresencas;
+        return Collections.unmodifiableList(datasPresencas);
     }
 
     @Override

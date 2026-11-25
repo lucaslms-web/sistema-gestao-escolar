@@ -8,8 +8,10 @@ import org.example.leitura.LeitorConcorrente;
 import org.example.leitura.ResultadoLeitura;
 
 import java.io.BufferedWriter;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -17,7 +19,7 @@ import java.util.Map;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class RepositorioComLocks implements Repositorio<Pessoa> {
+public class RepositorioComLocks implements RepositorioEscolar {
 
     private final Map<Integer, Pessoa> dados = new HashMap<>();
     private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
@@ -33,11 +35,7 @@ public class RepositorioComLocks implements Repositorio<Pessoa> {
         }
         writeLock.lock();
         try {
-            if (dados.containsKey(pessoa.getId())) {
-                return false;
-            }
-            dados.put(pessoa.getId(), pessoa);
-            return true;
+            return dados.putIfAbsent(pessoa.getId(), pessoa) == null;
         } finally {
             writeLock.unlock();
         }
@@ -83,6 +81,7 @@ public class RepositorioComLocks implements Repositorio<Pessoa> {
         }
     }
 
+    @Override
     public boolean atualizarNotaEFrequenciaAtomico(int id, double novaNota, int novaFrequencia) {
         writeLock.lock();
         try {
@@ -90,21 +89,21 @@ public class RepositorioComLocks implements Repositorio<Pessoa> {
             if (!(existente instanceof Aluno alunoAtual)) {
                 return false;
             }
-            Aluno alunoAtualizado = new Aluno(
+            dados.put(id, new Aluno(
                     alunoAtual.getId(),
                     alunoAtual.getNome(),
                     alunoAtual.getDataNascimento(),
                     novaNota,
                     novaFrequencia,
                     alunoAtual.getTurma()
-            );
-            dados.put(id, alunoAtualizado);
+            ));
             return true;
         } finally {
             writeLock.unlock();
         }
     }
 
+    @Override
     public String consultarSituacaoAlunoAtomico(int id) {
         readLock.lock();
         try {
@@ -118,15 +117,14 @@ public class RepositorioComLocks implements Repositorio<Pessoa> {
         }
     }
 
+    @Override
     public boolean upsertAtomico(Pessoa pessoa) {
         if (pessoa == null) {
             throw new IllegalArgumentException("Pessoa não pode ser nula.");
         }
         writeLock.lock();
         try {
-            boolean eraNovo = !dados.containsKey(pessoa.getId());
-            dados.put(pessoa.getId(), pessoa);
-            return eraNovo;
+            return dados.put(pessoa.getId(), pessoa) == null;
         } finally {
             writeLock.unlock();
         }
@@ -156,7 +154,8 @@ public class RepositorioComLocks implements Repositorio<Pessoa> {
     @Override
     public void salvarEmArquivo(String caminhoArquivo) throws IOException {
         List<Pessoa> snapshot = listarTodos();
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter(caminhoArquivo))) {
+        try (BufferedWriter bw = new BufferedWriter(
+                Files.newBufferedWriter(Path.of(caminhoArquivo), StandardCharsets.UTF_8), 64 * 1024)) {
             for (Pessoa p : snapshot) {
                 bw.write(formatadorCsv.formatar(p));
                 bw.newLine();

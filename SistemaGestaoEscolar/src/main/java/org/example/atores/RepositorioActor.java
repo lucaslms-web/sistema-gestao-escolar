@@ -1,28 +1,30 @@
 package org.example.atores;
 
-import org.example.dominio.Aluno;
-import org.example.dominio.Pessoa;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.AbstractBehavior;
 import org.apache.pekko.actor.typed.javadsl.ActorContext;
 import org.apache.pekko.actor.typed.javadsl.Behaviors;
 import org.apache.pekko.actor.typed.javadsl.Receive;
-import org.example.repositorio.BoletimService;
+import org.example.atores.MensagensRepositorio.*;
+import org.example.dominio.Aluno;
+import org.example.dominio.Pessoa;
 import org.example.formatacao.Formatador;
 import org.example.formatacao.FormatadorCsv;
-import org.example.atores.MensagensRepositorio.*;
+import org.example.repositorio.BoletimService;
 
 import java.io.BufferedWriter;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 public class RepositorioActor extends AbstractBehavior<ComandoRepositorio> {
 
-    // Estado interno exclusivo do ator — zero locks necessários
     private final Map<Integer, Pessoa> dados = new HashMap<>();
     private final BoletimService boletimService = new BoletimService();
     private final Formatador<Pessoa> formatadorCsv = new FormatadorCsv();
@@ -53,18 +55,16 @@ public class RepositorioActor extends AbstractBehavior<ComandoRepositorio> {
 
     private Behavior<ComandoRepositorio> onAdicionar(ComandoAdicionar cmd) {
         Pessoa p = cmd.getPessoa();
-        if (p == null || dados.containsKey(p.getId())) {
+        if (p == null) {
             cmd.getReplyTo().tell(false);
             return this;
         }
-        dados.put(p.getId(), p);
-        cmd.getReplyTo().tell(true);
+        cmd.getReplyTo().tell(dados.putIfAbsent(p.getId(), p) == null);
         return this;
     }
 
     private Behavior<ComandoRepositorio> onRemover(ComandoRemover cmd) {
-        boolean removido = dados.remove(cmd.getId()) != null;
-        cmd.getReplyTo().tell(removido);
+        cmd.getReplyTo().tell(dados.remove(cmd.getId()) != null);
         return this;
     }
 
@@ -89,15 +89,14 @@ public class RepositorioActor extends AbstractBehavior<ComandoRepositorio> {
             cmd.getReplyTo().tell(false);
             return this;
         }
-        Aluno atualizado = new Aluno(
+        dados.put(cmd.getId(), new Aluno(
                 alunoAtual.getId(),
                 alunoAtual.getNome(),
                 alunoAtual.getDataNascimento(),
                 cmd.getNovaNota(),
                 cmd.getNovaFrequencia(),
                 alunoAtual.getTurma()
-        );
-        dados.put(cmd.getId(), atualizado);
+        ));
         cmd.getReplyTo().tell(true);
         return this;
     }
@@ -118,9 +117,7 @@ public class RepositorioActor extends AbstractBehavior<ComandoRepositorio> {
             cmd.getReplyTo().tell(false);
             return this;
         }
-        boolean eraNovo = !dados.containsKey(p.getId());
-        dados.put(p.getId(), p);
-        cmd.getReplyTo().tell(eraNovo);
+        cmd.getReplyTo().tell(dados.put(p.getId(), p) == null);
         return this;
     }
 
@@ -134,15 +131,22 @@ public class RepositorioActor extends AbstractBehavior<ComandoRepositorio> {
     }
 
     private Behavior<ComandoRepositorio> onSalvar(ComandoSalvar cmd) {
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter(cmd.getCaminhoArquivo()))) {
-            for (Pessoa p : dados.values()) {
-                bw.write(formatadorCsv.formatar(p));
-                bw.newLine();
+        // Snapshot imutável rápido no ator; I/O em disco ocorre fora da thread do dispatcher
+        List<Pessoa> snapshot = List.copyOf(dados.values());
+        Path destino = Path.of(cmd.getCaminhoArquivo());
+
+        CompletableFuture.runAsync(() -> {
+            try (BufferedWriter bw = new BufferedWriter(
+                    Files.newBufferedWriter(destino, StandardCharsets.UTF_8), 64 * 1024)) {
+                for (Pessoa p : snapshot) {
+                    bw.write(formatadorCsv.formatar(p));
+                    bw.newLine();
+                }
+                cmd.getReplyTo().tell(new RespostaArquivo(true, null));
+            } catch (IOException e) {
+                cmd.getReplyTo().tell(new RespostaArquivo(false, e.getMessage()));
             }
-            cmd.getReplyTo().tell(new RespostaArquivo(true, null));
-        } catch (IOException e) {
-            cmd.getReplyTo().tell(new RespostaArquivo(false, e.getMessage()));
-        }
+        });
         return this;
     }
 }

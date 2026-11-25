@@ -1,11 +1,11 @@
 package org.example.repositorio;
 
-import org.example.dominio.Pessoa;
 import org.apache.pekko.actor.typed.ActorSystem;
 import org.apache.pekko.actor.typed.javadsl.AskPattern;
 import org.example.atores.ComandoRepositorio;
 import org.example.atores.MensagensRepositorio.*;
 import org.example.atores.RepositorioActor;
+import org.example.dominio.Pessoa;
 import org.example.leitura.LeitorConcorrente;
 import org.example.leitura.ResultadoLeitura;
 
@@ -18,9 +18,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-public class RepositorioComAtores implements Repositorio<Pessoa>, AutoCloseable {
+public class RepositorioComAtores implements RepositorioEscolar, AutoCloseable {
 
     private static final Duration TIMEOUT_PADRAO = Duration.ofSeconds(15);
+    private static final Duration TIMEOUT_ARQUIVO = Duration.ofSeconds(60);
     private final ActorSystem<ComandoRepositorio> sistemaAtores;
 
     public RepositorioComAtores() {
@@ -37,7 +38,7 @@ public class RepositorioComAtores implements Repositorio<Pessoa>, AutoCloseable 
                 replyTo -> new ComandoAdicionar(pessoa, replyTo),
                 TIMEOUT_PADRAO,
                 sistemaAtores.scheduler()
-        ));
+        ), TIMEOUT_PADRAO);
     }
 
     @Override
@@ -47,7 +48,7 @@ public class RepositorioComAtores implements Repositorio<Pessoa>, AutoCloseable 
                 replyTo -> new ComandoRemover(id, replyTo),
                 TIMEOUT_PADRAO,
                 sistemaAtores.scheduler()
-        ));
+        ), TIMEOUT_PADRAO);
     }
 
     @Override
@@ -57,7 +58,7 @@ public class RepositorioComAtores implements Repositorio<Pessoa>, AutoCloseable 
                 replyTo -> new ComandoBuscar(id, replyTo),
                 TIMEOUT_PADRAO,
                 sistemaAtores.scheduler()
-        ));
+        ), TIMEOUT_PADRAO);
         return resultado.orElse(null);
     }
 
@@ -68,7 +69,7 @@ public class RepositorioComAtores implements Repositorio<Pessoa>, AutoCloseable 
                 ComandoListarTodos::new,
                 TIMEOUT_PADRAO,
                 sistemaAtores.scheduler()
-        ));
+        ), TIMEOUT_PADRAO);
     }
 
     @Override
@@ -78,27 +79,30 @@ public class RepositorioComAtores implements Repositorio<Pessoa>, AutoCloseable 
                 ComandoTamanho::new,
                 TIMEOUT_PADRAO,
                 sistemaAtores.scheduler()
-        ));
+        ), TIMEOUT_PADRAO);
     }
 
+    @Override
     public boolean atualizarNotaEFrequenciaAtomico(int id, double novaNota, int novaFrequencia) {
         return aguardarResposta(AskPattern.ask(
                 sistemaAtores,
                 replyTo -> new ComandoAtualizarNotaEFrequencia(id, novaNota, novaFrequencia, replyTo),
                 TIMEOUT_PADRAO,
                 sistemaAtores.scheduler()
-        ));
+        ), TIMEOUT_PADRAO);
     }
 
+    @Override
     public String consultarSituacaoAlunoAtomico(int id) {
         return aguardarResposta(AskPattern.ask(
                 sistemaAtores,
                 replyTo -> new ComandoConsultarSituacao(id, replyTo),
                 TIMEOUT_PADRAO,
                 sistemaAtores.scheduler()
-        ));
+        ), TIMEOUT_PADRAO);
     }
 
+    @Override
     public boolean upsertAtomico(Pessoa pessoa) {
         if (pessoa == null) {
             throw new IllegalArgumentException("Pessoa não pode ser nula.");
@@ -108,24 +112,31 @@ public class RepositorioComAtores implements Repositorio<Pessoa>, AutoCloseable 
                 replyTo -> new ComandoUpsert(pessoa, replyTo),
                 TIMEOUT_PADRAO,
                 sistemaAtores.scheduler()
-        ));
+        ), TIMEOUT_PADRAO);
     }
 
     @Override
     public ResultadoLeitura carregarDeArquivo(String caminhoArquivo) {
-        return carregarDeArquivoConcorrente(caminhoArquivo, 4);
+        return carregarDeArquivoConcorrente(caminhoArquivo, 4, true);
     }
 
     public ResultadoLeitura carregarDeArquivoConcorrente(String caminhoArquivo, int numThreadsLeitura) {
+        return carregarDeArquivoConcorrente(caminhoArquivo, numThreadsLeitura, true);
+    }
+
+    public ResultadoLeitura carregarDeArquivoConcorrente(
+            String caminhoArquivo, int numThreadsLeitura, boolean exibirLog) {
+
         LeitorConcorrente leitor = new LeitorConcorrente();
-        ResultadoLeitura resultado = leitor.lerArquivoConcorrente(caminhoArquivo, numThreadsLeitura);
+        ResultadoLeitura resultado = leitor.lerArquivoConcorrente(
+                caminhoArquivo, numThreadsLeitura, 10_000, exibirLog);
 
         aguardarResposta(AskPattern.<ComandoRepositorio, Integer>ask(
                 sistemaAtores,
                 replyTo -> new ComandoSubstituirTodos(resultado.getRegistros(), replyTo),
-                TIMEOUT_PADRAO,
+                TIMEOUT_ARQUIVO,
                 sistemaAtores.scheduler()
-        ));
+        ), TIMEOUT_ARQUIVO);
         return resultado;
     }
 
@@ -134,17 +145,17 @@ public class RepositorioComAtores implements Repositorio<Pessoa>, AutoCloseable 
         RespostaArquivo resp = aguardarResposta(AskPattern.ask(
                 sistemaAtores,
                 replyTo -> new ComandoSalvar(caminhoArquivo, replyTo),
-                TIMEOUT_PADRAO,
+                TIMEOUT_ARQUIVO,
                 sistemaAtores.scheduler()
-        ));
+        ), TIMEOUT_ARQUIVO);
         if (!resp.isSucesso()) {
             throw new IOException("Falha ao salvar arquivo via RepositorioActor: " + resp.getErro());
         }
     }
 
-    private <T> T aguardarResposta(CompletionStage<T> stage) {
+    private <T> T aguardarResposta(CompletionStage<T> stage, Duration timeout) {
         try {
-            return stage.toCompletableFuture().get(TIMEOUT_PADRAO.toMillis(), TimeUnit.MILLISECONDS);
+            return stage.toCompletableFuture().get(timeout.toMillis(), TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Operação interrompida aguardando resposta do ator.", e);

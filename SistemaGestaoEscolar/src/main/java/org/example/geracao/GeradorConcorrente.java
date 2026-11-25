@@ -3,17 +3,12 @@ package org.example.geracao;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.SplittableRandom;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -22,10 +17,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 public class GeradorConcorrente {
-
-    private static final String[] NOMES = {"Ana", "Bruno", "Carlos", "Diana", "Eduardo", "Fernanda", "Gustavo", "Helena"};
-    private static final String[] SOBRENOMES = {"Silva", "Santos", "Oliveira", "Souza", "Costa", "Pereira", "Rodrigues"};
-    private static final String[] MATERIAS = {"Matematica", "Fisica", "Historia", "Geografia", "Biologia", "Quimica"};
 
     public void gerarTodosOsArquivosConcorrentes(int numThreads) {
         int[] tamanhos = {1_000, 100_000, 1_000_000, 5_000_000};
@@ -38,18 +29,23 @@ public class GeradorConcorrente {
         long seedBase = 42L;
 
         System.out.println("Iniciando geração concorrente (" + numThreads + " thread(s))...\n");
-
         for (int i = 0; i < tamanhos.length; i++) {
-            gerarArquivoConcorrente(nomesFicheiros[i], tamanhos[i], numThreads, seedBase + i);
+            gerarArquivoConcorrente(nomesFicheiros[i], tamanhos[i], numThreads, seedBase + i, true);
         }
-
         System.out.println("\nGeração concorrente concluída!");
     }
 
     public double gerarArquivoConcorrente(String nomeFicheiro, int qtdLinhas, int numThreads, long seed) {
+        return gerarArquivoConcorrente(nomeFicheiro, qtdLinhas, numThreads, seed, true);
+    }
+
+    public double gerarArquivoConcorrente(String nomeFicheiro, int qtdLinhas, int numThreads, long seed, boolean logConsole) {
         if (numThreads < 1) {
             throw new IllegalArgumentException("O número de threads deve ser pelo menos 1.");
         }
+
+        Path destinoPath = Path.of(nomeFicheiro).toAbsolutePath();
+        Path diretorioBase = (destinoPath.getParent() != null) ? destinoPath.getParent() : Path.of(".");
 
         long inicioTempo = System.nanoTime();
         ExecutorService executor = Executors.newFixedThreadPool(numThreads);
@@ -66,11 +62,10 @@ public class GeradorConcorrente {
                     ? (inicioId + linhasPorThread - 1 + linhasRestantes)
                     : (inicioId + linhasPorThread - 1);
 
-            // Cada tarefa recebe seu próprio gerador derivado antes da execução paralela
             final SplittableRandom taskRandom = baseRandom.split();
             final int indiceBloco = t;
 
-            tarefas.add(() -> gerarBlocoTemporario(indiceBloco, inicioId, fimId, taskRandom));
+            tarefas.add(() -> gerarBlocoTemporario(diretorioBase, indiceBloco, inicioId, fimId, taskRandom));
         }
 
         List<Path> arquivosTemporarios = new ArrayList<>(numThreads);
@@ -80,9 +75,7 @@ public class GeradorConcorrente {
             for (Future<Path> futuro : futuros) {
                 arquivosTemporarios.add(futuro.get());
             }
-
-            // Etapa final: consolida os blocos na ordem sequencial dos IDs
-            juntarArquivosTemporarios(arquivosTemporarios, nomeFicheiro);
+            juntarArquivosTemporarios(arquivosTemporarios, destinoPath);
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -96,57 +89,39 @@ public class GeradorConcorrente {
             limparTemporarios(arquivosTemporarios);
         }
 
-        long fimTempo = System.nanoTime();
-        double tempoMs = (fimTempo - inicioTempo) / 1_000_000.0;
+        double tempoMs = (System.nanoTime() - inicioTempo) / 1_000_000.0;
 
-        File arquivoGerado = new File(nomeFicheiro);
-        double tamanhoMB = arquivoGerado.length() / (1024.0 * 1024.0);
-
-        System.out.printf("Ficheiro: %-25s | Threads: %-2d | Linhas: %-9d | Tempo: %8.2f ms | Tamanho: %6.2f MB%n",
-                nomeFicheiro, numThreads, qtdLinhas, tempoMs, tamanhoMB);
-
+        if (logConsole) {
+            double tamanhoMB = destinoPath.toFile().length() / (1024.0 * 1024.0);
+            System.out.printf("Ficheiro: %-25s | Threads: %-2d | Linhas: %-9d | Tempo: %8.2f ms | Tamanho: %6.2f MB%n",
+                    nomeFicheiro, numThreads, qtdLinhas, tempoMs, tamanhoMB);
+        }
         return tempoMs;
     }
 
-    private Path gerarBlocoTemporario(int indiceBloco, int inicioId, int fimId, SplittableRandom random) throws IOException {
-        Path tempFile = Files.createTempFile("bloco_gerador_" + indiceBloco + "_", ".tmp");
+    private Path gerarBlocoTemporario(Path diretorio, int indiceBloco, int inicioId, int fimId, SplittableRandom random)
+            throws IOException {
+        Path tempFile = Files.createTempFile(diretorio, "bloco_gerador_" + indiceBloco + "_", ".tmp");
+        StringBuilder sb = new StringBuilder(128);
 
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter(tempFile.toFile()))) {
+        try (BufferedWriter bw = new BufferedWriter(
+                Files.newBufferedWriter(tempFile, StandardCharsets.UTF_8), GeradorSequencial.BUFFER_SIZE)) {
             for (int id = inicioId; id <= fimId; id++) {
-                boolean isAluno = random.nextBoolean();
-                String tipo = isAluno ? "ALUNO" : "PROFESSOR";
-
-                String nome = NOMES[random.nextInt(NOMES.length)] + " " + SOBRENOMES[random.nextInt(SOBRENOMES.length)];
-                int ano = 1970 + random.nextInt(41);
-                int mes = 1 + random.nextInt(12);
-                int dia = 1 + random.nextInt(28);
-                String data = LocalDate.of(ano, mes, dia).toString();
-
-                double valor;
-                String listaExtra;
-
-                if (isAluno) {
-                    valor = random.nextDouble() * 10;
-                    listaExtra = (random.nextInt(30) + 70) + "," + (random.nextInt(30) + 70);
-                } else {
-                    valor = 2000 + (random.nextDouble() * 8000);
-                    listaExtra = MATERIAS[random.nextInt(MATERIAS.length)] + "," + MATERIAS[random.nextInt(MATERIAS.length)];
-                }
-
-                String linha = String.format(Locale.US, "%d;%s;%s;%.2f;%s;%s\n",
-                        id, tipo, nome, valor, listaExtra, data);
-                bw.write(linha);
+                sb.setLength(0);
+                GeradorSequencial.escreverLinhaCsv(sb, id, random);
+                bw.write(sb.toString());
             }
         }
-
         return tempFile;
     }
 
-    private void juntarArquivosTemporarios(List<Path> temporarios, String destinoFinal) throws IOException {
-        byte[] buffer = new byte[64 * 1024]; // Buffer de 64 KB para cópia rápida em disco
-        try (BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(destinoFinal))) {
+    private void juntarArquivosTemporarios(List<Path> temporarios, Path destinoFinal) throws IOException {
+        byte[] buffer = new byte[GeradorSequencial.BUFFER_SIZE];
+        try (BufferedOutputStream out = new BufferedOutputStream(
+                Files.newOutputStream(destinoFinal), GeradorSequencial.BUFFER_SIZE)) {
             for (Path temp : temporarios) {
-                try (BufferedInputStream in = new BufferedInputStream(new FileInputStream(temp.toFile()))) {
+                try (BufferedInputStream in = new BufferedInputStream(
+                        Files.newInputStream(temp), GeradorSequencial.BUFFER_SIZE)) {
                     int bytesLidos;
                     while ((bytesLidos = in.read(buffer)) != -1) {
                         out.write(buffer, 0, bytesLidos);

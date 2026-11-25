@@ -2,15 +2,15 @@ package org.example.dominio;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class Nota extends RegistroAcademico {
-    private double valor;
-    private String disciplina;
-    private List<Double> historicoAvaliacoes;
+    private final double valor;
+    private final String disciplina;
+    private final List<Double> historicoAvaliacoes;
 
     public Nota(int id, LocalDate dataRegistro, double valor, String disciplina, List<Double> historicoAvaliacoes) {
-        // 1. Chamada obrigatória ao construtor da superclasse
         super(id, dataRegistro, TipoRegistro.NOTA);
 
         if (valor < 0.0 || valor > 10.0) {
@@ -21,8 +21,10 @@ public class Nota extends RegistroAcademico {
         }
 
         this.valor = valor;
-        this.disciplina = disciplina;
-        this.historicoAvaliacoes = (historicoAvaliacoes != null) ? new ArrayList<>(historicoAvaliacoes) : new ArrayList<>();
+        this.disciplina = disciplina.trim();
+        this.historicoAvaliacoes = (historicoAvaliacoes != null)
+                ? new ArrayList<>(historicoAvaliacoes)
+                : new ArrayList<>();
     }
 
     public double getValor() {
@@ -34,10 +36,9 @@ public class Nota extends RegistroAcademico {
     }
 
     public List<Double> getHistoricoAvaliacoes() {
-        return historicoAvaliacoes;
+        return Collections.unmodifiableList(historicoAvaliacoes);
     }
 
-    // 2. Implementação obrigatória do método abstrato herdado de RegistroAcademico
     @Override
     public String gerarResumo() {
         return String.format("Nota: %.2f na disciplina %s | Avaliações realizadas: %d",

@@ -3,7 +3,7 @@ package org.example.dominio;
 import java.time.LocalDate;
 
 public abstract class Pessoa {
-    private int id;
+    private final int id;
     private String nome;
     private LocalDate dataNascimento;
 
@@ -19,7 +19,7 @@ public abstract class Pessoa {
         }
 
         this.id = id;
-        this.nome = nome;
+        this.nome = nome.trim();
         this.dataNascimento = dataNascimento;
     }
 
@@ -35,18 +35,11 @@ public abstract class Pessoa {
         return dataNascimento;
     }
 
-    public void setId(int id) {
-        if (id <= 0) {
-            throw new IllegalArgumentException("ID deve ser positivo.");
-        }
-        this.id = id;
-    }
-
     public void setNome(String nome) {
         if (nome == null || nome.isBlank()) {
             throw new IllegalArgumentException("Nome inválido.");
         }
-        this.nome = nome;
+        this.nome = nome.trim();
     }
 
     public void setDataNascimento(LocalDate dataNascimento) {
@@ -56,20 +49,11 @@ public abstract class Pessoa {
         this.dataNascimento = dataNascimento;
     }
 
-    /**
-     * Método protegido acessível apenas pela própria classe e suas subclasses (Aluno e Professor).
-     */
     protected String formatarIdentificacaoBase() {
         return String.format("ID=%d | Nome=%s | Nascimento=%s", id, nome, dataNascimento);
     }
 
-    /**
-     * Contrato polimórfico sobrescrito por cada subclasse para exibição formatada.
-     */
     public abstract String exibirDetalhes();
 
-    /**
-     * Contrato polimórfico sobrescrito por cada subclasse para serialização em CSV.
-     */
     public abstract String toCsvLinha();
 }

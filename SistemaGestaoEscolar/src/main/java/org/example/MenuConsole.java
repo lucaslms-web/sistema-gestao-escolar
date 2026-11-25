@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Scanner;
 
 public class MenuConsole {
@@ -52,6 +53,9 @@ public class MenuConsole {
                     case 0 -> System.out.println("Encerrando o sistema...");
                     default -> System.out.println("Opção inválida.");
                 }
+            } catch (NoSuchElementException e) {
+                System.out.println("\nEntrada encerrada. Saindo...");
+                return;
             } catch (Exception e) {
                 System.out.println("Erro na operação: " + e.getMessage());
             }
@@ -61,6 +65,10 @@ public class MenuConsole {
     private void menuAdicionar() {
         System.out.print("Tipo (1 - Aluno | 2 - Professor): ");
         int tipo = Integer.parseInt(scanner.nextLine().trim());
+        if (tipo != 1 && tipo != 2) {
+            System.out.println("Tipo inválido. Escolha 1 para Aluno ou 2 para Professor.");
+            return;
+        }
 
         System.out.print("ID: ");
         int id = Integer.parseInt(scanner.nextLine().trim());
@@ -84,7 +92,10 @@ public class MenuConsole {
             System.out.print("Salário: ");
             double salario = Double.parseDouble(scanner.nextLine().trim());
             System.out.print("Disciplinas (separadas por vírgula): ");
-            List<String> disciplinas = Arrays.asList(scanner.nextLine().trim().split(","));
+            List<String> disciplinas = Arrays.stream(scanner.nextLine().split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toList();
             novoRegistro = new Professor(id, nome, data, salario, disciplinas);
         }
 
@@ -110,7 +121,6 @@ public class MenuConsole {
             return;
         }
 
-        // Chamada polimórfica via Formatador<Pessoa> -> p.exibirDetalhes()
         System.out.println(formatadorTexto.formatar(p));
         if (p instanceof Aluno aluno) {
             System.out.println("Situação no Boletim: " + boletimService.verificarSituacao(aluno));
@@ -150,6 +160,11 @@ public class MenuConsole {
     private void menuPersistencia() throws IOException {
         System.out.print("1 - Carregar de CSV | 2 - Salvar em CSV: ");
         int escolha = Integer.parseInt(scanner.nextLine().trim());
+        if (escolha != 1 && escolha != 2) {
+            System.out.println("Opção inválida. Escolha 1 para Carregar ou 2 para Salvar.");
+            return;
+        }
+
         System.out.print("Nome do arquivo (ex: dados_pequeno.csv): ");
         String arquivo = scanner.nextLine().trim();
 
@@ -157,8 +172,9 @@ public class MenuConsole {
         if (escolha == 1) {
             ResultadoLeitura res = repositorio.carregarDeArquivo(arquivo);
             double tempoMs = (System.nanoTime() - t0) / 1_000_000.0;
-            System.out.printf("Carregados %d registros no repositório em %.2f ms.%n", res.getLinhasValidas(), tempoMs);
-        } else if (escolha == 2) {
+            System.out.printf("Carregados %d registros (%d linhas inválidas ignoradas) em %.2f ms.%n",
+                    res.getLinhasValidas(), res.getLinhasInvalidas(), tempoMs);
+        } else {
             repositorio.salvarEmArquivo(arquivo);
             double tempoMs = (System.nanoTime() - t0) / 1_000_000.0;
             System.out.printf("Repositório salvo com sucesso em %s (%.2f ms).%n", arquivo, tempoMs);

@@ -52,6 +52,57 @@ class RepositorioComLocksTest {
     }
 
     @Test
+    void deveGarantirConsistenciaExataComInclusoesERemocoesConcorrentes() throws Exception {
+        RepositorioComLocks repo = new RepositorioComLocks();
+        int inicial = 200;
+        for (int i = 1; i <= inicial; i++) {
+            repo.adicionar(new Aluno(i, "Inicial-" + i, LocalDate.of(2003, 1, 1), 7.5, 85, "Turma-1"));
+        }
+
+        int numThreads = 8;
+        int inclusoesPorThread = 250;
+        int remocoesPorThread = 20; // Cada thread remove 20 IDs distintos da base inicial (total = 160)
+
+        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+        List<Callable<int[]>> tarefas = new ArrayList<>();
+
+        for (int t = 0; t < numThreads; t++) {
+            final int threadIdx = t;
+            tarefas.add(() -> {
+                int inclusoes = 0;
+                int remocoes = 0;
+
+                for (int i = 1; i <= inclusoesPorThread; i++) {
+                    int novoId = 10_000 + (threadIdx * 1_000) + i;
+                    if (repo.adicionar(new Aluno(novoId, "Novo-" + novoId, LocalDate.of(2004, 1, 1), 8.0, 90, "Turma-2"))) {
+                        inclusoes++;
+                    }
+                }
+
+                for (int r = 1; r <= remocoesPorThread; r++) {
+                    int idRemover = (threadIdx * remocoesPorThread) + r;
+                    if (repo.remover(idRemover)) {
+                        remocoes++;
+                    }
+                }
+                return new int[]{inclusoes, remocoes};
+            });
+        }
+
+        int totalInclusoes = 0;
+        int totalRemocoes = 0;
+        for (Future<int[]> f : executor.invokeAll(tarefas)) {
+            int[] res = f.get();
+            totalInclusoes += res[0];
+            totalRemocoes += res[1];
+        }
+        executor.shutdown();
+
+        int esperado = inicial + totalInclusoes - totalRemocoes;
+        assertEquals(esperado, repo.tamanho());
+    }
+
+    @Test
     void deveGarantirAtomicidadeNasOperacoesCompostasConcorrentes() throws Exception {
         RepositorioComLocks repo = new RepositorioComLocks();
         repo.adicionar(new Aluno(1, "Lucas", LocalDate.of(2002, 6, 10), 9.0, 60, "Turma-10"));
@@ -65,14 +116,11 @@ class RepositorioComLocksTest {
             tarefas.add(() -> {
                 for (int i = 0; i < 500; i++) {
                     if (estadoA) {
-                        // Nota alta (9.0), mas frequência baixa (60) -> REPROVADO POR FALTA
                         assertTrue(repo.atualizarNotaEFrequenciaAtomico(1, 9.0, 60));
                     } else {
-                        // Nota baixa (3.0), mas frequência alta (95) -> REPROVADO POR NOTA
                         assertTrue(repo.atualizarNotaEFrequenciaAtomico(1, 3.0, 95));
                     }
                     String situacao = repo.consultarSituacaoAlunoAtomico(1);
-                    // Se houver mistura entre threads (nota 9.0 + freq 95), apareceria "APROVADO"
                     assertTrue(situacao.equals("REPROVADO POR FALTA") || situacao.equals("REPROVADO POR NOTA"),
                             "Estado inconsistente observado: " + situacao);
                 }

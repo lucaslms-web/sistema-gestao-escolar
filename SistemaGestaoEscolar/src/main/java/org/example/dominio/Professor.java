@@ -18,7 +18,20 @@ public class Professor extends Pessoa {
         }
 
         this.salario = salario;
-        this.disciplinas = (disciplinas != null) ? new ArrayList<>(disciplinas) : new ArrayList<>();
+        this.disciplinas = higienizarDisciplinas(disciplinas);
+    }
+
+    private static List<String> higienizarDisciplinas(List<String> origem) {
+        if (origem == null || origem.isEmpty()) {
+            return new ArrayList<>();
+        }
+        List<String> limpas = new ArrayList<>(origem.size());
+        for (String d : origem) {
+            if (d != null && !d.isBlank()) {
+                limpas.add(d.trim());
+            }
+        }
+        return limpas;
     }
 
     public double getSalario() {
@@ -37,12 +50,12 @@ public class Professor extends Pessoa {
     }
 
     public void setDisciplinas(List<String> disciplinas) {
-        this.disciplinas = (disciplinas != null) ? new ArrayList<>(disciplinas) : new ArrayList<>();
+        this.disciplinas = higienizarDisciplinas(disciplinas);
     }
 
     public void adicionarDisciplina(String disciplina) {
         if (disciplina != null && !disciplina.isBlank()) {
-            this.disciplinas.add(disciplina);
+            this.disciplinas.add(disciplina.trim());
         }
     }
 

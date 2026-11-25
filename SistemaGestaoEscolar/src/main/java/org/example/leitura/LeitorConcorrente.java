@@ -3,8 +3,10 @@ package org.example.leitura;
 import org.example.dominio.Pessoa;
 
 import java.io.BufferedReader;
-import java.io.FileReader;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
@@ -40,16 +42,21 @@ public class LeitorConcorrente {
 
         System.out.println("Iniciando leitura concorrente (" + numThreads + " thread(s))...\n");
         for (String arquivo : arquivos) {
-            lerArquivoConcorrente(arquivo, numThreads);
+            lerArquivoConcorrente(arquivo, numThreads, TAMANHO_LOTE_PADRAO, true);
         }
         System.out.println("\nLeitura concorrente concluída!");
     }
 
     public ResultadoLeitura lerArquivoConcorrente(String caminhoArquivo, int numThreads) {
-        return lerArquivoConcorrente(caminhoArquivo, numThreads, TAMANHO_LOTE_PADRAO);
+        return lerArquivoConcorrente(caminhoArquivo, numThreads, TAMANHO_LOTE_PADRAO, true);
     }
 
     public ResultadoLeitura lerArquivoConcorrente(String caminhoArquivo, int numThreads, int tamanhoLote) {
+        return lerArquivoConcorrente(caminhoArquivo, numThreads, tamanhoLote, true);
+    }
+
+    public ResultadoLeitura lerArquivoConcorrente(
+            String caminhoArquivo, int numThreads, int tamanhoLote, boolean logConsole) {
         if (numThreads < 1) {
             throw new IllegalArgumentException("O número de threads deve ser pelo menos 1.");
         }
@@ -57,16 +64,18 @@ public class LeitorConcorrente {
             throw new IllegalArgumentException("O tamanho do lote deve ser pelo menos 1.");
         }
 
+        Path path = Path.of(caminhoArquivo);
         long inicioTempo = System.nanoTime();
         ExecutorService executor = Executors.newFixedThreadPool(numThreads);
         int maxLotesEmVoo = numThreads * 4;
         List<Future<ResultadoLote>> futurosJanela = new ArrayList<>(maxLotesEmVoo);
 
-        ArrayList<Pessoa> registrosConsolidados = new ArrayList<>();
-        int[] totais = new int[2]; // [0] = validas, [1] = invalidas
+        ArrayList<Pessoa> registrosConsolidados = new ArrayList<>(LeitorSequencial.estimarCapacidade(path));
+        int[] totais = new int[2];
         int loteOffset = 0;
 
-        try (BufferedReader br = new BufferedReader(new FileReader(caminhoArquivo))) {
+        try (BufferedReader br = new BufferedReader(
+                Files.newBufferedReader(path, StandardCharsets.UTF_8), LeitorSequencial.BUFFER_SIZE)) {
             List<String> loteAtual = new ArrayList<>(tamanhoLote);
             String linha;
 
@@ -102,12 +111,12 @@ public class LeitorConcorrente {
 
             registrosConsolidados.trimToSize();
 
-            long fimTempo = System.nanoTime();
-            double tempoMs = (fimTempo - inicioTempo) / 1_000_000.0;
+            double tempoMs = (System.nanoTime() - inicioTempo) / 1_000_000.0;
 
-            System.out.printf("Arquivo: %-22s | Threads: %-2d | Válidas: %-9d | Inválidas: %-5d | Tempo: %8.2f ms%n",
-                    caminhoArquivo, numThreads, totais[0], totais[1], tempoMs);
-
+            if (logConsole) {
+                System.out.printf("Arquivo: %-22s | Threads: %-2d | Válidas: %-9d | Inválidas: %-5d | Tempo: %8.2f ms%n",
+                        caminhoArquivo, numThreads, totais[0], totais[1], tempoMs);
+            }
             return new ResultadoLeitura(registrosConsolidados, totais[0], totais[1], tempoMs);
 
         } catch (InterruptedException e) {
@@ -135,7 +144,6 @@ public class LeitorConcorrente {
                 totais[1] += resLote.invalidas;
             } catch (ExecutionException e) {
                 String msg = "Falha ao processar o lote #" + (loteOffset + i + 1) + " do arquivo " + caminhoArquivo;
-                System.err.println(msg + ": " + e.getCause().getMessage());
                 throw new RuntimeException(msg, e.getCause());
             }
         }
@@ -148,14 +156,12 @@ public class LeitorConcorrente {
 
         for (String linha : linhas) {
             try {
-                Pessoa pessoa = parserCompartilhado.parsearLinha(linha);
-                registrosLocais.add(pessoa);
+                registrosLocais.add(parserCompartilhado.parsearLinha(linha));
                 validas++;
             } catch (IllegalArgumentException | DateTimeParseException e) {
                 invalidas++;
             }
         }
-
         return new ResultadoLote(registrosLocais, validas, invalidas);
     }
 }
