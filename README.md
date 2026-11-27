@@ -12,6 +12,11 @@ de dados, identificando possíveis diferenças de desempenho, vantagems e limita
 ## Objetivos
 Entender como programação concorrente funciona na pratica. Dessa forma, entender quais são suas vantagens e desvantagens em comparação no uso de diferentes threads e a sequencial
 ## Funcionalidades
+**Processamento CSV:** Leitura e geração sequencial/concorrente com validação automática de dados.
+**Multithreading:** Processamento paralelo para leitura e escrita rápida de grandes volumes de registros.
+**Modelo de Atores (Apache Pekko):** Gerenciamento assíncrono e seguro de estado no repositório.
+**Controle de Concorrência:** Repositórios sincronizados com *locks* para evitar condições de corrida.
+**Domínio Escolar:** Validação de regras de negócio e geração de boletins.
 
 ## Tecnologias utilizadas
 Java, Maven, Apache pekko(Atores Akka)
