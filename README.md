@@ -10,16 +10,59 @@ A proposta é observar como cada abordagem se comporta em operações de process
 de dados, identificando possíveis diferenças de desempenho, vantagems e limitações.
 
 ## Objetivos
-
+Entender como programação concorrente funciona na pratica. Dessa forma, entender quais são suas vantagens e desvantagens em comparação no uso de diferentes threads e a sequencial
 ## Funcionalidades
 
 ## Tecnologias utilizadas
-
+Java, Maven, Apache pekko(Atores Akka)
 ## Estrutura do projeto
-
+A estrutura do projeto utilizou o padrão do Maven:
+\SISTEMA-GESTAO-ESCOLAR
+├───.idea
+├───out
+│   └───production
+│       └───sistema-gestao-escolar
+│           └───.idea
+├───src
+│   ├───main
+│   │   └───java
+│   │       ├───Classes
+│   │       └───org
+│   │           └───example
+│   │               ├───atores
+│   │               ├───dominio
+│   │               ├───formatacao
+│   │               ├───geracao
+│   │               ├───leitura
+│   │               └───repositorio
+│   └───test
+│       └───java
+└───target
+    ├───classes
+    │   ├───Classes
+    │   └───org
+    │       └───example
+    │           ├───atores
+    │           ├───dominio
+    │           ├───formatacao
+    │           ├───geracao
+    │           ├───leitura
+    │           └───repositorio
+    ├───generated-sources
+    │   └───annotations
+    ├───generated-test-sources
+    │   └───test-annotations
+    ├───maven-status
+    │   └───maven-compiler-plugin
+    │       ├───compile
+    │       │   └───default-compile
+    │       └───testCompile
+    │           └───default-testCompile
+    ├───surefire-reports
+    └───test-classes
 ## Como executar
 
 ## Experimentos e análise de desempenho
 
 ## Integrantes
-Re_lemos
+Lucas, Matheus, Renan lemos
