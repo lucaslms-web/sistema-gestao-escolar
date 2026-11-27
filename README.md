@@ -17,49 +17,23 @@ Entender como programação concorrente funciona na pratica. Dessa forma, entend
 Java, Maven, Apache pekko(Atores Akka)
 ## Estrutura do projeto
 A estrutura do projeto utilizou o padrão do Maven:
-\SISTEMA-GESTAO-ESCOLAR
-├───.idea
-├───out
-│   └───production
-│       └───sistema-gestao-escolar
-│           └───.idea
-├───src
-│   ├───main
-│   │   └───java
-│   │       ├───Classes
-│   │       └───org
-│   │           └───example
-│   │               ├───atores
-│   │               ├───dominio
-│   │               ├───formatacao
-│   │               ├───geracao
-│   │               ├───leitura
-│   │               └───repositorio
-│   └───test
-│       └───java
-└───target
-    ├───classes
-    │   ├───Classes
-    │   └───org
-    │       └───example
-    │           ├───atores
-    │           ├───dominio
-    │           ├───formatacao
-    │           ├───geracao
-    │           ├───leitura
-    │           └───repositorio
-    ├───generated-sources
-    │   └───annotations
-    ├───generated-test-sources
-    │   └───test-annotations
-    ├───maven-status
-    │   └───maven-compiler-plugin
-    │       ├───compile
-    │       │   └───default-compile
-    │       └───testCompile
-    │           └───default-testCompile
-    ├───surefire-reports
-    └───test-classes
+sistema-gestao-escolar/
+├── .gitignore
+├── pom.xml
+└── src/
+    ├── main/
+    │   └── java/
+    │       ├── Classes/
+    │       └── org/
+    │           └── example/
+    │               ├── atores/
+    │               ├── dominio/
+    │               ├── formatacao/
+    │               ├── geracao/
+    │               ├── leitura/
+    │               └── repositorio/
+    └── test/
+        └── java/
 ## Como executar
 
 ## Experimentos e análise de desempenho
