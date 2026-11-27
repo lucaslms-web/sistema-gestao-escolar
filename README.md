@@ -1,5 +1,5 @@
 # Sistema de gestão escolar
-#Sobre
+# Sobre
 Este repositório tem o objetivo de desenvolver um sistema de gestão
 escolar de escopo reduzido, aplicando conceitos de programção Orientada
 a objetaos (POO). 
