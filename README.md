@@ -51,7 +51,7 @@ sistema-gestao-escolar/
    mvn clean install
    ``` 
 ## Experimentos e análise de desempenho
-Leia: [Relatório Comum do Grupo — Sistema de Gestão Escolar.pdf](Relatório Comum do Grupo — Sistema de Gestão Escolar.pdf)
+Leia: [Relatório Comum do Grupo — Sistema de Gestão Escolar](Relatório%20Comum%20do%20Grupo%20—%20Sistema%20de%20Gestão%20Escolar.pdf)
 
 ## Integrantes
 Lucas, Matheus, Renan lemos
