@@ -37,7 +37,19 @@ sistema-gestao-escolar/
         └── java/
 ```
 ## Como executar
+### Pré-requisitos
+* Java Development Kit (JDK) https://www.oracle.com/java/technologies/downloads/
+* Maven https://maven.apache.org/ (para gerenciamento de dependências e build)
 
+### Passo a Passo
+
+   ```bash
+   git clone https://github.com/lucaslms-web/sistema-gestao-escolar.git
+
+   cd sistema-gestao-escola
+
+   mvn clean install
+   ``` 
 ## Experimentos e análise de desempenho
 
 ## Integrantes
