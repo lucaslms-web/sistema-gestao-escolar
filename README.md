@@ -10,7 +10,7 @@ A proposta é observar como cada abordagem se comporta em operações de process
 de dados, identificando possíveis diferenças de desempenho, vantagems e limitações.
 
 ## Objetivos
-Entender como programação concorrente funciona na pratica. Dessa forma, entender quais são suas vantagens e desvantagens em comparação no uso de diferentes threads e a sequencial
+Entender as diferenças da programação sequencial e concorrente na pratica. Dessa forma, exemplificar são suas vantagens e desvantagens em comparação no uso de diferentes threads
 ## Funcionalidades
 * **Processamento CSV:** Leitura e geração sequencial/concorrente com validação automática de dados.
 * **Multithreading:** Processamento paralelo para leitura e escrita rápida de grandes volumes de registros.
