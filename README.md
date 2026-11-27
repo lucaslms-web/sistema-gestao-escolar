@@ -17,6 +17,7 @@ Entender como programação concorrente funciona na pratica. Dessa forma, entend
 Java, Maven, Apache pekko(Atores Akka)
 ## Estrutura do projeto
 A estrutura do projeto utilizou o padrão do Maven:
+'''
 sistema-gestao-escolar/
 ├── .gitignore
 ├── pom.xml
@@ -34,6 +35,7 @@ sistema-gestao-escolar/
     │               └── repositorio/
     └── test/
         └── java/
+'''
 ## Como executar
 
 ## Experimentos e análise de desempenho
