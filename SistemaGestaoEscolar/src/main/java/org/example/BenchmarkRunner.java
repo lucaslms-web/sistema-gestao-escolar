@@ -24,6 +24,8 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 public class BenchmarkRunner {
@@ -34,31 +36,24 @@ public class BenchmarkRunner {
     private static final int[] CONFIGS_THREADS = {1, 2, 4, 8};
     private static final int TAMANHO_LOTE_LEITURA = 10_000;
 
-    private static final boolean RODAR_ETAPA_1_GERACAO = true;
-    private static final boolean RODAR_ETAPA_2_LEITURA = true;
-    private static final boolean RODAR_ETAPA_3_REPOSITORIO = true;
-    private static final boolean INCLUIR_DATASET_GIGANTE_5M = true;
-
     private static final String ARQUIVO_SAIDA_MD = "resultados_benchmark.md";
-
-    // Impede Dead Code Elimination (DCE) pelo compilador JIT da JVM
     private static volatile long blackhole;
 
-    private static class Estatisticas {
-        final String cenario;
-        final String modo;
-        final int numThreads;
-        final long carga;
-        final String unidadeCarga;
-        final double mediaMs;
-        final double medianaMs;
-        final double desvioPadraoMs;
-        final double coefVariacaoPct;
-        final double throughputPorSeg;
-        final double speedup;
-        final double eficienciaPct;
+    public static class Estatisticas {
+        public final String cenario;
+        public final String modo;
+        public final int numThreads;
+        public final long carga;
+        public final String unidadeCarga;
+        public final double mediaMs;
+        public final double medianaMs;
+        public final double desvioPadraoMs;
+        public final double coefVariacaoPct;
+        public final double throughputPorSeg;
+        public final double speedup;
+        public final double eficienciaPct;
 
-        Estatisticas(
+        public Estatisticas(
                 String cenario,
                 String modo,
                 int numThreads,
@@ -112,13 +107,49 @@ public class BenchmarkRunner {
         }
     }
 
+    public static class ResultadoBenchmarkCompleto {
+        public final String cabecalhoAmbiente;
+        public final List<Estatisticas> etapa1Geracao;
+        public final List<Estatisticas> etapa2Leitura;
+        public final List<Estatisticas> etapa3Repositorio;
+        public final String resumoExecutivo;
+        public final String relatorioMarkdownCompleto;
+
+        public ResultadoBenchmarkCompleto(
+                String cabecalhoAmbiente,
+                List<Estatisticas> etapa1Geracao,
+                List<Estatisticas> etapa2Leitura,
+                List<Estatisticas> etapa3Repositorio,
+                String resumoExecutivo,
+                String relatorioMarkdownCompleto) {
+            this.cabecalhoAmbiente = cabecalhoAmbiente;
+            this.etapa1Geracao = etapa1Geracao;
+            this.etapa2Leitura = etapa2Leitura;
+            this.etapa3Repositorio = etapa3Repositorio;
+            this.resumoExecutivo = resumoExecutivo;
+            this.relatorioMarkdownCompleto = relatorioMarkdownCompleto;
+        }
+    }
+
     public static void main(String[] args) {
+        executarSuiteCompleta(true, true, true, true, true, System.out::println);
+    }
+
+    public static ResultadoBenchmarkCompleto executarSuiteCompleta(
+            boolean rodarEtapa1,
+            boolean rodarEtapa2,
+            boolean rodarEtapa3,
+            boolean incluirDatasetGigante5M,
+            boolean salvarEmMarkdown,
+            Consumer<String> logger) {
+
+        Consumer<String> log = (logger != null) ? logger : s -> {};
         Path tempDir = criarDiretorioTemporarioSeguro();
 
         StringBuilder relatorioMd = new StringBuilder();
-        String cabecalhoAmbiente = gerarCabecalhoAmbiente();
+        String cabecalhoAmbiente = gerarCabecalhoAmbiente(incluirDatasetGigante5M);
 
-        System.out.println(cabecalhoAmbiente);
+        log.accept(cabecalhoAmbiente);
         relatorioMd.append(cabecalhoAmbiente).append("\n");
 
         List<Estatisticas> resEtapa1 = List.of();
@@ -126,29 +157,43 @@ public class BenchmarkRunner {
         List<Estatisticas> resEtapa3 = List.of();
 
         try {
-            if (RODAR_ETAPA_1_GERACAO) {
-                resEtapa1 = executarBenchmarkGeracao(tempDir);
+            if (rodarEtapa1) {
+                resEtapa1 = executarBenchmarkGeracao(tempDir, incluirDatasetGigante5M, log);
                 relatorioMd.append(formatarTabelaMarkdown(
                         "## Etapa 1 — Geração de Arquivos CSV (Sequencial vs. Concorrente)", resEtapa1)).append("\n");
             }
 
-            if (RODAR_ETAPA_2_LEITURA) {
-                resEtapa2 = executarBenchmarkLeitura(tempDir);
+            if (rodarEtapa2) {
+                resEtapa2 = executarBenchmarkLeitura(tempDir, incluirDatasetGigante5M, log);
                 relatorioMd.append(formatarTabelaMarkdown(
                         "## Etapa 2 — Leitura e Parsing de CSV (Sequencial vs. Concorrente)", resEtapa2)).append("\n");
             }
 
-            if (RODAR_ETAPA_3_REPOSITORIO) {
-                resEtapa3 = executarBenchmarkRepositorio(tempDir);
+            if (rodarEtapa3) {
+                resEtapa3 = executarBenchmarkRepositorio(tempDir, log);
                 relatorioMd.append(formatarTabelaMarkdown(
                         "## Etapa 3 — Repositório Concorrente: Sequencial vs. Locks vs. Atores (70% Leitura / 20% Escrita / 10% Remoção)",
                         resEtapa3)).append("\n");
             }
 
-            relatorioMd.append(gerarResumoExecutivo(resEtapa1, resEtapa2, resEtapa3));
+            String resumo = gerarResumoExecutivo(resEtapa1, resEtapa2, resEtapa3);
+            relatorioMd.append(resumo);
 
-            salvarRelatorioMarkdown(relatorioMd.toString());
-            System.out.println("\nBenchmark finalizado com sucesso! Resultados salvos em: " + ARQUIVO_SAIDA_MD);
+            if (salvarEmMarkdown) {
+                salvarRelatorioMarkdown(relatorioMd.toString(), log);
+                log.accept("\nBenchmark finalizado com sucesso! Resultados salvos em: " + ARQUIVO_SAIDA_MD);
+            } else {
+                log.accept("\nBenchmark finalizado com sucesso!");
+            }
+
+            return new ResultadoBenchmarkCompleto(
+                    cabecalhoAmbiente,
+                    resEtapa1,
+                    resEtapa2,
+                    resEtapa3,
+                    resumo,
+                    relatorioMd.toString()
+            );
 
         } finally {
             limparDiretorioTemporario(tempDir);
@@ -165,12 +210,12 @@ public class BenchmarkRunner {
         }
     }
 
-    private static String gerarCabecalhoAmbiente() {
+    public static String gerarCabecalhoAmbiente(boolean incluir5M) {
         Runtime rt = Runtime.getRuntime();
         long maxHeapMb = rt.maxMemory() / (1024 * 1024);
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
-        String avisoHeap = (INCLUIR_DATASET_GIGANTE_5M && maxHeapMb < 2048)
+        String avisoHeap = (incluir5M && maxHeapMb < 2048)
                 ? String.format("\n> **Aviso:** Heap máxima atual (%d MB) abaixo de 2048 MB; recomenda-se `-Xmx4g` para o dataset de 5M.\n", maxHeapMb)
                 : "";
 
@@ -196,10 +241,10 @@ public class BenchmarkRunner {
         );
     }
 
-    private static List<Estatisticas> executarBenchmarkGeracao(Path tempDir) {
-        System.out.println("\n==================== ETAPA 1: BENCHMARK DE GERAÇÃO ====================\n");
+    private static List<Estatisticas> executarBenchmarkGeracao(Path tempDir, boolean incluir5M, Consumer<String> log) {
+        log.accept("\n==================== ETAPA 1: BENCHMARK DE GERAÇÃO ====================\n");
 
-        int[] tamanhos = INCLUIR_DATASET_GIGANTE_5M
+        int[] tamanhos = incluir5M
                 ? new int[]{1_000, 100_000, 1_000_000, 5_000_000}
                 : new int[]{1_000, 100_000, 1_000_000};
         String[] rotulos = {"Pequeno (1k)", "Médio (100k)", "Grande (1M)", "Gigante (5M)"};
@@ -232,7 +277,7 @@ public class BenchmarkRunner {
 
             Estatisticas estSeq = new Estatisticas(cenario, "Sequencial", 1, qtdLinhas, "linhas/s", amostrasSeq, 0.0);
             resultados.add(estSeq);
-            imprimirLinhaProgresso(estSeq);
+            imprimirLinhaProgresso(estSeq, log);
 
             for (int threads : CONFIGS_THREADS) {
                 for (int w = 0; w < WARMUP_RUNS; w++) {
@@ -251,7 +296,7 @@ public class BenchmarkRunner {
                 Estatisticas estConc = new Estatisticas(
                         cenario, threads + " thread(s)", threads, qtdLinhas, "linhas/s", amostrasConc, estSeq.mediaMs);
                 resultados.add(estConc);
-                imprimirLinhaProgresso(estConc);
+                imprimirLinhaProgresso(estConc, log);
             }
         }
 
@@ -259,10 +304,10 @@ public class BenchmarkRunner {
         return resultados;
     }
 
-    private static List<Estatisticas> executarBenchmarkLeitura(Path tempDir) {
-        System.out.println("\n==================== ETAPA 2: BENCHMARK DE LEITURA ====================\n");
+    private static List<Estatisticas> executarBenchmarkLeitura(Path tempDir, boolean incluir5M, Consumer<String> log) {
+        log.accept("\n==================== ETAPA 2: BENCHMARK DE LEITURA ====================\n");
 
-        int[] tamanhos = INCLUIR_DATASET_GIGANTE_5M
+        int[] tamanhos = incluir5M
                 ? new int[]{1_000, 100_000, 1_000_000, 5_000_000}
                 : new int[]{1_000, 100_000, 1_000_000};
         String[] rotulos = {"Pequeno (1k)", "Médio (100k)", "Grande (1M)", "Gigante (5M)"};
@@ -309,7 +354,7 @@ public class BenchmarkRunner {
 
             Estatisticas estSeq = new Estatisticas(cenario, "Sequencial", 1, qtdLinhas, "linhas/s", amostrasSeq, 0.0);
             resultados.add(estSeq);
-            imprimirLinhaProgresso(estSeq);
+            imprimirLinhaProgresso(estSeq, log);
 
             for (int threads : CONFIGS_THREADS) {
                 for (int w = 0; w < WARMUP_RUNS; w++) {
@@ -342,7 +387,7 @@ public class BenchmarkRunner {
                 Estatisticas estConc = new Estatisticas(
                         cenario, threads + " thread(s)", threads, qtdLinhas, "linhas/s", amostrasConc, estSeq.mediaMs);
                 resultados.add(estConc);
-                imprimirLinhaProgresso(estConc);
+                imprimirLinhaProgresso(estConc, log);
             }
 
             deletarSeExistir(arquivoDataset);
@@ -351,8 +396,8 @@ public class BenchmarkRunner {
         return resultados;
     }
 
-    private static List<Estatisticas> executarBenchmarkRepositorio(Path tempDir) {
-        System.out.println("\n==================== ETAPA 3: BENCHMARK DE REPOSITÓRIO (SEQUENCIAL vs LOCKS vs ATORES) ====================\n");
+    private static List<Estatisticas> executarBenchmarkRepositorio(Path tempDir, Consumer<String> log) {
+        log.accept("\n==================== ETAPA 3: BENCHMARK DE REPOSITÓRIO (SEQUENCIAL vs LOCKS vs ATORES) ====================\n");
 
         int registrosBase = 100_000;
         Path arquivoBase = tempDir.resolve("bench_etapa3_base.csv");
@@ -361,7 +406,6 @@ public class BenchmarkRunner {
         GeradorConcorrente gerador = new GeradorConcorrente();
         gerador.gerarArquivoConcorrente(caminhoBase, registrosBase, 4, SEED_BASE, false);
 
-        // Pré-carrega os registros base uma única vez para evitar I/O redundante entre as rodadas
         LeitorSequencial leitor = new LeitorSequencial();
         List<Pessoa> registrosBaseMemoria = leitor.lerArquivo(caminhoBase, false).getRegistros();
 
@@ -375,7 +419,6 @@ public class BenchmarkRunner {
             int totalOps = cargasOperacoes[c];
             String cenario = rotulosCarga[c];
 
-            // 1. Baseline Sequencial
             for (int w = 0; w < WARMUP_RUNS; w++) {
                 RepositorioSequencial repoSeq = new RepositorioSequencial();
                 popularRepositorio(repoSeq, registrosBaseMemoria);
@@ -400,9 +443,8 @@ public class BenchmarkRunner {
 
             Estatisticas estSeq = new Estatisticas(cenario, "Sequencial", 1, totalOps, "ops/s", amostrasSeq, 0.0);
             resultados.add(estSeq);
-            imprimirLinhaProgresso(estSeq);
+            imprimirLinhaProgresso(estSeq, log);
 
-            // 2. Repositório com Locks (ReentrantReadWriteLock)
             for (int threads : CONFIGS_THREADS) {
                 for (int w = 0; w < WARMUP_RUNS; w++) {
                     RepositorioComLocks repoLocks = new RepositorioComLocks();
@@ -429,14 +471,13 @@ public class BenchmarkRunner {
                 Estatisticas estLocks = new Estatisticas(
                         cenario, "Locks (" + threads + "t)", threads, totalOps, "ops/s", amostrasLocks, estSeq.mediaMs);
                 resultados.add(estLocks);
-                imprimirLinhaProgresso(estLocks);
+                imprimirLinhaProgresso(estLocks, log);
             }
 
-            // 3. Repositório com Atores (Apache Pekko Typed)
             for (int threads : CONFIGS_THREADS) {
                 for (int w = 0; w < WARMUP_RUNS; w++) {
                     try (RepositorioComAtores repoAtores = new RepositorioComAtores()) {
-                        repoAtores.carregarDeArquivoConcorrente(caminhoBase, 4);
+                        repoAtores.carregarDeArquivoConcorrente(caminhoBase, 4, false);
                         SimuladorClientesConcorrentes.ResultadoSimulacao sim =
                                 simulador.executarCargaConcorrenteAtores(repoAtores, threads, totalOps, registrosBase, SEED_BASE);
                         blackhole ^= sim.tamanhoFinalRepositorio;
@@ -447,7 +488,7 @@ public class BenchmarkRunner {
                 double[] amostrasAtores = new double[MEDICOES_RUNS];
                 for (int r = 0; r < MEDICOES_RUNS; r++) {
                     try (RepositorioComAtores repoAtores = new RepositorioComAtores()) {
-                        repoAtores.carregarDeArquivoConcorrente(caminhoBase, 4);
+                        repoAtores.carregarDeArquivoConcorrente(caminhoBase, 4, false);
                         SimuladorClientesConcorrentes.ResultadoSimulacao sim =
                                 simulador.executarCargaConcorrenteAtores(repoAtores, threads, totalOps, registrosBase, SEED_BASE + r);
                         amostrasAtores[r] = sim.tempoMs;
@@ -459,7 +500,7 @@ public class BenchmarkRunner {
                 Estatisticas estAtores = new Estatisticas(
                         cenario, "Atores (" + threads + "t)", threads, totalOps, "ops/s", amostrasAtores, estSeq.mediaMs);
                 resultados.add(estAtores);
-                imprimirLinhaProgresso(estAtores);
+                imprimirLinhaProgresso(estAtores, log);
             }
         }
 
@@ -474,11 +515,11 @@ public class BenchmarkRunner {
         }
     }
 
-    private static void imprimirLinhaProgresso(Estatisticas e) {
-        System.out.printf(Locale.US,
-                "[%-20s | %-13s] Média: %8.2f ms | Mediana: %8.2f ms | DP: %6.2f ms (CV %4.1f%%) | Vazão: %10.0f %-8s | Speedup: %5.2fx (%5.1f%%)%n",
+    private static void imprimirLinhaProgresso(Estatisticas e, Consumer<String> log) {
+        log.accept(String.format(Locale.US,
+                "[%-20s | %-13s] Média: %8.2f ms | Mediana: %8.2f ms | DP: %6.2f ms (CV %4.1f%%) | Vazão: %10.0f %-8s | Speedup: %5.2fx (%5.1f%%)",
                 e.cenario, e.modo, e.mediaMs, e.medianaMs, e.desvioPadraoMs, e.coefVariacaoPct,
-                e.throughputPorSeg, e.unidadeCarga, e.speedup, e.eficienciaPct);
+                e.throughputPorSeg, e.unidadeCarga, e.speedup, e.eficienciaPct));
     }
 
     private static String formatarTabelaMarkdown(String tituloSecao, List<Estatisticas> lista) {
@@ -518,22 +559,22 @@ public class BenchmarkRunner {
         return sb.toString();
     }
 
-    private static java.util.Optional<Estatisticas> melhorPorSpeedup(List<Estatisticas> lista) {
+    private static Optional<Estatisticas> melhorPorSpeedup(List<Estatisticas> lista) {
         return lista.stream()
                 .filter(e -> e.numThreads > 1)
                 .max(Comparator.comparingDouble(e -> e.speedup));
     }
 
-    private static java.util.Optional<Estatisticas> melhorPorVazao(List<Estatisticas> lista) {
+    private static Optional<Estatisticas> melhorPorVazao(List<Estatisticas> lista) {
         return lista.stream()
                 .max(Comparator.comparingDouble(e -> e.throughputPorSeg));
     }
 
-    private static void salvarRelatorioMarkdown(String conteudo) {
+    private static void salvarRelatorioMarkdown(String conteudo, Consumer<String> log) {
         try (BufferedWriter bw = Files.newBufferedWriter(Path.of(ARQUIVO_SAIDA_MD), StandardCharsets.UTF_8)) {
             bw.write(conteudo);
         } catch (IOException e) {
-            System.err.println("Não foi possível gravar " + ARQUIVO_SAIDA_MD + ": " + e.getMessage());
+            log.accept("Não foi possível gravar " + ARQUIVO_SAIDA_MD + ": " + e.getMessage());
         }
     }
 
